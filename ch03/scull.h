@@ -9,7 +9,7 @@ static struct scull_dev {
 	int qset;
 	unsigned long size;
 	unsigned int access_key;
-	struct semaphore sem;
+	struct mutex mtx;
 	struct cdev cdev;
 };
 

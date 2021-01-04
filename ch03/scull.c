@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
+#include <linux/mutex.h>
 #include <asm/uaccess.h>
 
 #include "scull.h"
@@ -48,7 +49,7 @@ ssize_t scull_write(struct file *filp, const char __user *buff,
 	int item_idx, item_offs, qt_idx, qt_offs;
 	ssize_t retval = 0;
 
-	if (down_interruptible(&dev->sem))
+	if (mutex_lock_interruptible(&dev->mtx))
 		return -ERESTARTSYS;
 
 	item_idx = (long)*f_pos / itemsize;
@@ -86,7 +87,7 @@ ssize_t scull_write(struct file *filp, const char __user *buff,
 		dev->size = *f_pos;
 
 out:
-	up(&dev->sem);
+	mutex_unlock(&dev->mtx);
 	return retval;
 }
 
@@ -101,7 +102,7 @@ ssize_t scull_read(struct file *filp, char __user *buff,
 	int item_idx, item_offs, qt_idx, qt_offs;
 	ssize_t retval = 0;
 
-	if (down_interruptible(&dev->sem))
+	if (mutex_lock_interruptible(&dev->mtx))
 		return -ERESTARTSYS;
 	if (*f_pos >= dev->size)
 		goto out;
@@ -129,7 +130,7 @@ ssize_t scull_read(struct file *filp, char __user *buff,
 	*f_pos += count;
 	retval = count;
 out:
-	up(&dev->sem);
+	mutex_unlock(&dev->mtx);
 	return retval;
 }
 
@@ -246,6 +247,7 @@ static int __init scull_init(void)
 	while (i < scull_nr_devs) {
 		scull_devs[i].qset = scull_qset;
 		scull_devs[i].quantum = scull_quantum;
+		mutex_init(&scull_devs[i].mtx);
 		scull_setup_cdev(&scull_devs[i], i);
 		i++;
 	}
