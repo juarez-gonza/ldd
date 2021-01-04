@@ -1,0 +1,42 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+KERNELDIR	Makefile	/^	KERNELDIR ?= \/lib\/modules\/$(shell uname -r)\/build$/;"	m
+MOD_NAME	Makefile	/^	MOD_NAME := scull$/;"	m
+PWD	Makefile	/^	PWD := $(shell pwd)$/;"	m
+SCULL_DEVS	scull.h	2;"	d
+SCULL_MAJOR	scull.h	1;"	d
+SCULL_QSET	scull.h	3;"	d
+SCULL_QUANTUM	scull.h	4;"	d
+access_key	scull.h	/^	unsigned int access_key;$/;"	m	struct:scull_dev
+cdev	scull.h	/^	struct cdev cdev;$/;"	m	struct:scull_dev	typeref:struct:scull_dev::cdev
+data	scull.h	/^	struct scull_qset *data;$/;"	m	struct:scull_dev	typeref:struct:scull_dev::scull_qset
+data	scull.h	/^	void **data;$/;"	m	struct:scull_qset
+next	scull.h	/^	struct scull_qset *next;$/;"	m	struct:scull_qset	typeref:struct:scull_qset::scull_qset
+obj-m	Makefile	/^	obj-m := $(MOD_NAME).o$/;"	m
+qset	scull.h	/^	int qset;$/;"	m	struct:scull_dev
+quantum	scull.h	/^	int quantum;$/;"	m	struct:scull_dev
+read	scull.c	/^ssize_t read(struct file *filp, const char __user *buff,$/;"	f
+scull_dev	scull.h	/^static struct scull_dev {$/;"	s
+scull_devs	scull.c	/^struct scull_dev *scull_devs = NULL;$/;"	v	typeref:struct:scull_dev
+scull_exit	scull.c	/^module_exit(scull_exit);$/;"	v
+scull_exit	scull.c	/^static void scull_exit(void)$/;"	f	file:
+scull_follow	scull.c	/^static struct scull_qset *scull_follow(struct scull_dev *dev, int item)$/;"	f	file:
+scull_fops	scull.c	/^struct file_operations scull_fops = {$/;"	v	typeref:struct:file_operations
+scull_init	scull.c	/^module_init(scull_init);$/;"	v
+scull_init	scull.c	/^static int __init scull_init(void)$/;"	f	file:
+scull_major	scull.c	/^int scull_major = SCULL_MAJOR;$/;"	v
+scull_minor	scull.c	/^int scull_minor = 0;$/;"	v
+scull_nr_devs	scull.c	/^int scull_nr_devs = SCULL_DEVS;$/;"	v
+scull_open	scull.c	/^int scull_open(struct inode *inode, struct file *filp)$/;"	f
+scull_qset	scull.c	/^int scull_qset = SCULL_QSET;$/;"	v
+scull_qset	scull.h	/^static struct scull_qset {$/;"	s
+scull_quantum	scull.c	/^int scull_quantum = SCULL_QUANTUM;$/;"	v
+scull_release	scull.c	/^int scull_release(struct inode *inode, struct file *filp)$/;"	f
+scull_setup_cdev	scull.c	/^static void scull_setup_cdev(struct scull_dev *dev, int index)$/;"	f	file:
+scull_trim	scull.c	/^static int scull_trim(struct scull_dev *dev)$/;"	f	file:
+sem	scull.h	/^	struct semaphore sem;$/;"	m	struct:scull_dev	typeref:struct:scull_dev::semaphore
+size	scull.h	/^	unsigned long size;$/;"	m	struct:scull_dev

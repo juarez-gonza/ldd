@@ -1,0 +1,8 @@
+#! /bin/sh
+module="scull"
+
+/sbin/rmmod $module
+
+for file in $(ls /dev/ | grep ${module}); do
+	rm -f /dev/${file}
+done
