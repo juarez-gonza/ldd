@@ -9,6 +9,7 @@
 #include <asm/uaccess.h>
 
 #include "scull.h"
+MODULE_LICENSE("GPL");
 
 struct scull_dev *scull_devs = NULL;
 
@@ -211,6 +212,8 @@ static void scull_setup_cdev(struct scull_dev *dev, int index)
 	err = cdev_add(&dev->cdev, devno, 1);
 	if (err)
 		printk(KERN_NOTICE "Error %d adding scull%d\n", err, index);
+	printk("cdev added succesfully. Major: %d, Minor: %d\n",
+		scull_major, scull_minor + index);
 }
 
 static int __init scull_init(void)
@@ -225,6 +228,7 @@ static int __init scull_init(void)
 	} else {
 		result = alloc_chrdev_region(&dev, scull_minor, scull_nr_devs,
 			"scull");
+		scull_major = MAJOR(dev);
 	}
 	if (result < 0) {
 		printk(KERN_WARNING "scull: can't get major %d\n", scull_major);
@@ -239,12 +243,14 @@ static int __init scull_init(void)
 	memset(scull_devs, 0, scull_nr_devs * sizeof(*scull_devs));
 
 	i = 0;
-	while (i++ < scull_nr_devs) {
+	while (i < scull_nr_devs) {
 		scull_devs[i].qset = scull_qset;
 		scull_devs[i].quantum = scull_quantum;
 		scull_setup_cdev(&scull_devs[i], i);
+		i++;
 	}
-	printk("Scull init successfully");
+	printk("Scull init successfully. Major: %d, Minor: %d\n",
+		scull_major, scull_minor);
 	return 0;
 
 fail_malloc:
@@ -255,19 +261,19 @@ fail_malloc:
 static void scull_exit(void)
 {
 	int i, dev;
-
 	i = 0;
-	while (i++ < scull_nr_devs) {
-		cdev_del(&scull_devs[i].cdev);
-		scull_trim(scull_devs + i);
+	if (scull_devs) {
+		while (i++ < scull_nr_devs) {
+			scull_trim(scull_devs + i);
+			cdev_del(&scull_devs[i].cdev);
+		}
+		kfree(scull_devs);
+		scull_devs = NULL;
 	}
-	kfree(scull_devs);
-	scull_devs = NULL;
-
 	dev = MKDEV(scull_major, scull_minor);
 	unregister_chrdev_region(dev, scull_nr_devs);
-
-	printk("Scull exit successfully");
+	printk("Scull exit successfully. Major: %d, Minor: %d\n",
+		scull_major, scull_minor);
 }
 
 module_init(scull_init);
