@@ -47,7 +47,7 @@ ssize_t scull_write(struct file *filp, const char __user *buff,
 	int qset = dev->qset;
 	int itemsize = quantum * qset;
 	int item_idx, item_offs, qt_idx, qt_offs;
-	ssize_t retval = 0;
+	ssize_t retval = -ENOMEM;
 
 	if (mutex_lock_interruptible(&dev->mtx))
 		return -ERESTARTSYS;
@@ -70,12 +70,13 @@ ssize_t scull_write(struct file *filp, const char __user *buff,
 		dptr->data[qt_idx] = kmalloc(quantum, GFP_KERNEL);
 		if (!dptr->data[qt_idx])
 			goto out;
-		memset(dptr->data[qt_idx], 0, quantum);
 	}
 
 	if (count > quantum - qt_offs)
 		count = quantum - qt_offs;
 
+	printk(KERN_DEBUG "START OF DATA BEFORE WRITTEN: %p\n", dev->data);
+	printk(KERN_DEBUG "%p == %p ? %d\n", dev->data, dptr, dev->data == dptr ? 1 : 0);
 	if (copy_from_user(dptr->data[qt_idx] + qt_offs, buff, count)) {
 		retval = -EFAULT;
 		goto out;
@@ -85,7 +86,7 @@ ssize_t scull_write(struct file *filp, const char __user *buff,
 	retval = count;
 	if (dev->size < *f_pos)
 		dev->size = *f_pos;
-
+	printk(KERN_DEBUG "START OF DATA AFTER WRITTEN: %p\n", dev->data);
 out:
 	mutex_unlock(&dev->mtx);
 	return retval;
@@ -115,9 +116,11 @@ ssize_t scull_read(struct file *filp, char __user *buff,
 	qt_offs = item_offs % quantum;
 
 	dptr = scull_follow(dev, item_idx);
+	printk(KERN_DEBUG "NOT STOPPING IN SCULL_FOLLOW\n");
 
-	if (!dptr || !dptr->data || !dptr->data[qt_idx])
+	if (dptr == NULL || !dptr->data || !dptr->data[qt_idx])
 		goto out;
+	printk(KERN_DEBUG "DATA NOT NULL\n");
 
 	if (count > quantum - qt_offs)
 		count = quantum - qt_offs;
@@ -129,6 +132,7 @@ ssize_t scull_read(struct file *filp, char __user *buff,
 
 	*f_pos += count;
 	retval = count;
+	printk(KERN_DEBUG "DATA READ SUCCESSFULLY\n");
 out:
 	mutex_unlock(&dev->mtx);
 	return retval;
@@ -136,6 +140,8 @@ out:
 
 int scull_release(struct inode *inode, struct file *filp)
 {
+	struct scull_dev *dev = filp->private_data;
+	printk("START OF DATA AFTER RELEASE: %p\n", dev->data);
 	return 0;
 }
 
@@ -146,28 +152,35 @@ int scull_open(struct inode *inode, struct file *filp)
 	dev = container_of(inode->i_cdev, struct scull_dev, cdev);
 	filp->private_data = dev;
 
-	if ((filp->f_flags & O_ACCMODE) == O_WRONLY)
+	if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
+		if (mutex_lock_interruptible(&dev->mtx))
+			return -ERESTARTSYS;
+		printk(KERN_DEBUG "FLAGS FOR WRITE ONLY\n");
 		scull_trim(dev);
+		mutex_unlock(&dev->mtx);
+	}
 
 	return 0;
 }
 
-static struct scull_qset *scull_follow(struct scull_dev *dev, int item_idx)
+struct scull_qset *scull_follow(struct scull_dev *dev, int item_idx)
 {
 	struct scull_qset *qs;
 	qs = dev->data;
+	printk("BEGGINING DATA: %d, POSITION: %p\n", qs == NULL ? 0 : 1, qs);
 	if (!qs) {
-		qs = kmalloc(sizeof(*qs), GFP_KERNEL);
+		qs = dev->data = kmalloc(sizeof(struct scull_qset), GFP_KERNEL);
 		if (qs == NULL)
 			return NULL;
-		memset(qs, 0, sizeof(*qs));
+		memset(qs, 0, sizeof(struct scull_qset));
 	}
+	printk("START OF DATA %p", qs);
 	while (item_idx--) {
 		if (!qs->next) {
-			qs->next = kmalloc(sizeof(*qs), GFP_KERNEL);
+			qs->next = kmalloc(sizeof(struct scull_qset), GFP_KERNEL);
 			if (qs->next == NULL)
 				return NULL;
-			memset(qs->next, 0, sizeof(*qs));
+			memset(qs->next, 0, sizeof(struct scull_qset));
 		}
 		qs = qs->next;
 	}
@@ -180,19 +193,15 @@ static int scull_trim(struct scull_dev *dev)
 	int qset, i;
 
 	qset = dev->qset;
-	dptr = dev->data;
-	while (dptr) {
+	for (dptr = dev->data; dptr; dptr = next) {
 		if (dptr->data) {
-			i = 0;
-			while (i < qset) {
-				kfree(dptr->data[i++]);
-			}
+			for (i = 0; i < qset; i++)
+				kfree(dptr->data[i]);
 			kfree(dptr->data);
 			dptr->data = NULL;
 		}
 		next = dptr->next;
 		kfree(dptr);
-		dptr = next;
 	}
 	dev->size = 0;
 	dev->quantum = scull_quantum;
@@ -201,7 +210,7 @@ static int scull_trim(struct scull_dev *dev)
 	return 0;
 }
 
-static void scull_setup_cdev(struct scull_dev *dev, int index)
+void scull_setup_cdev(struct scull_dev *dev, int index)
 {
 	int err, devno;
 	devno = MKDEV(scull_major, scull_minor + index);
@@ -217,7 +226,28 @@ static void scull_setup_cdev(struct scull_dev *dev, int index)
 		scull_major, scull_minor + index);
 }
 
-static int __init scull_init(void)
+static void scull_exit(void)
+{
+	int i;
+	dev_t dev;
+
+	i = 0;
+	if (scull_devs) {
+		while (i < scull_nr_devs) {
+			scull_trim(scull_devs + i);
+			cdev_del(&scull_devs[i].cdev);
+			i++;
+		}
+		kfree(scull_devs);
+		scull_devs = NULL;
+	}
+	dev = MKDEV(scull_major, scull_minor);
+	unregister_chrdev_region(dev, scull_nr_devs);
+	printk("Scull exit successfully. Major: %d, Minor: %d\n",
+		scull_major, scull_minor);
+}
+
+int __init scull_init(void)
 {
 	dev_t dev;
 	int result;
@@ -236,12 +266,12 @@ static int __init scull_init(void)
 		return result;
 	}
 
-	scull_devs = kmalloc(scull_nr_devs * sizeof(*scull_devs), GFP_KERNEL);
+	scull_devs = kmalloc(scull_nr_devs * sizeof(struct scull_dev), GFP_KERNEL);
 	if (!scull_devs) {
 		result = -ENOMEM;
 		goto fail_malloc;
 	}
-	memset(scull_devs, 0, scull_nr_devs * sizeof(*scull_devs));
+	memset(scull_devs, 0, scull_nr_devs * sizeof(struct scull_dev));
 
 	i = 0;
 	while (i < scull_nr_devs) {
@@ -256,26 +286,8 @@ static int __init scull_init(void)
 	return 0;
 
 fail_malloc:
-	unregister_chrdev_region(dev, scull_nr_devs);
+	scull_exit();
 	return result;
-}
-
-static void scull_exit(void)
-{
-	int i, dev;
-	i = 0;
-	if (scull_devs) {
-		while (i++ < scull_nr_devs) {
-			scull_trim(scull_devs + i);
-			cdev_del(&scull_devs[i].cdev);
-		}
-		kfree(scull_devs);
-		scull_devs = NULL;
-	}
-	dev = MKDEV(scull_major, scull_minor);
-	unregister_chrdev_region(dev, scull_nr_devs);
-	printk("Scull exit successfully. Major: %d, Minor: %d\n",
-		scull_major, scull_minor);
 }
 
 module_init(scull_init);

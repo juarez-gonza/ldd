@@ -3,7 +3,7 @@
 #define SCULL_QSET 500
 #define SCULL_QUANTUM 4000
 
-static struct scull_dev {
+struct scull_dev {
 	struct scull_qset *data;
 	int quantum;
 	int qset;
@@ -13,7 +13,7 @@ static struct scull_dev {
 	struct cdev cdev;
 };
 
-static struct scull_qset {
+struct scull_qset {
 	void **data;
 	struct scull_qset *next;
 };

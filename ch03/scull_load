@@ -2,6 +2,7 @@
 module="scull"
 device="scull"
 mode="664"
+group="sudo"
 
 /sbin/insmod ./$module.ko $* || exit 1
 
@@ -11,12 +12,6 @@ major=$(cat /proc/devices | grep scull | cut -d " " -f 1)
 i=0
 while [ $i -le 3 ]; do
 	mknod /dev/${device}${i} c $major $i
-	i=$(( i+1 ))
-done
-
-group="sudo"
-i=0
-while [ $i -le 3 ]; do
 	chgrp $group /dev/${device}${i}
 	chmod $mode /dev/${device}${i}
 	i=$(( i+1 ))
