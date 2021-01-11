@@ -52,12 +52,34 @@ static ssize_t scull_write(struct file *filp, const char __user *buff,
 	if (mutex_lock_interruptible(&dev->mtx))
 		return -ERESTARTSYS;
 
-	while (freespace(dev) == 0) {
+	/*
+	 * Simple way to perform a sleep (less configurable)
+	 * while (freespace(dev) == 0) {
 		mutex_unlock(&dev->mtx);
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 		if (wait_event_interruptible(dev->out_q, freespace(dev) != 0))
 			return -ERESTARTSYS;
+		if (mutex_lock_interruptible(&dev->mtx))
+			return -ERESTARTSYS;
+	}
+	*/
+
+	// complex way to perform a sleep
+	while (!freespace(dev)) {
+		DEFINE_WAIT(wait);
+
+		mutex_unlock(&dev->mtx);
+		if (filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+
+		prepare_to_wait(&dev->out_q, &wait, TASK_INTERRUPTIBLE);
+		if (!freespace(dev))
+			schedule();
+		finish_wait(&dev->out_q, &wait);
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+
 		if (mutex_lock_interruptible(&dev->mtx))
 			return -ERESTARTSYS;
 	}
@@ -91,12 +113,34 @@ static ssize_t scull_read(struct file *filp, char __user *buff,
 	if (mutex_lock_interruptible(&dev->mtx))
 		return -ERESTARTSYS;
 
-	while (dev->rp == dev->wp) {
+	/*
+	 * Simple way to perform a sleep (less configurable)
+	 * while (dev->rp == dev->wp) {
 		mutex_unlock(&dev->mtx);
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 		if (wait_event_interruptible(dev->in_q, dev->rp != dev->wp))
 			return -ERESTARTSYS;
+		if (mutex_lock_interruptible(&dev->mtx))
+			return -ERESTARTSYS;
+	}
+	*/
+
+	// comples way to perform a sleep
+	while (dev->rp == dev->wp) {
+		DEFINE_WAIT(wait);
+
+		mutex_unlock(&dev->mtx);
+		if (filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+
+		prepare_to_wait(&dev->in_q, &wait, TASK_INTERRUPTIBLE);
+		if (dev->rp == dev->wp)
+			schedule();
+		finish_wait(&dev->in_q, &wait);
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+
 		if (mutex_lock_interruptible(&dev->mtx))
 			return -ERESTARTSYS;
 	}
@@ -123,6 +167,15 @@ out:
 
 static int scull_release(struct inode *inode, struct file *filp)
 {
+	struct scull_dev *dev;
+	dev = filp->private_data;
+
+	if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
+		atomic_dec(&dev->nwriters);
+	}
+	if ((filp->f_flags & O_ACCMODE) == O_RDONLY) {
+		atomic_dec(&dev->nreaders);
+	}
 	return 0;
 }
 
@@ -134,10 +187,10 @@ static int scull_open(struct inode *inode, struct file *filp)
 	filp->private_data = dev;
 
 	if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
-		atomic_add(1, &dev->nwriters);
+		atomic_inc(&dev->nwriters);
 	}
 	if ((filp->f_flags & O_ACCMODE) == O_RDONLY) {
-		atomic_add(1, &dev->nreaders);
+		atomic_inc(&dev->nreaders);
 	}
 
 	return 0;
